@@ -18,7 +18,65 @@ try{const data=JSON.parse(localStorage.getItem(KEY)||'null');wheels=Array.isArra
 if(!wheels.length)wheels=[structuredClone(initial)];if(!wheels.some(w=>w.id===active))active=wheels[0].id;
 const current=()=>wheels.find(w=>w.id===active)||wheels[0];
 function save(){try{localStorage.setItem(KEY,JSON.stringify({wheels,active}));$('#notice').textContent='Guardado en este navegador.'}catch{$('#notice').textContent='Almacenamiento no disponible: exporta una copia.'}}
-function draw(){const c=$('#wheel'),x=c.getContext('2d'),items=current().items,n=items.length,R=290;x.clearRect(0,0,640,640);x.save();x.translate(320,320);x.rotate(angle);if(!n){x.fillStyle='#dee8f2';x.beginPath();x.arc(0,0,R,0,Math.PI*2);x.fill();x.fillStyle='#183650';x.textAlign='center';x.font='bold 23px system-ui';x.fillText('Agrega actividades',0,10)}else items.forEach((item,i)=>{const a=-Math.PI/2+i*2*Math.PI/n,b=a+2*Math.PI/n;x.beginPath();x.moveTo(0,0);x.arc(0,0,R,a,b);x.closePath();x.fillStyle=item.color;x.fill();x.strokeStyle='white';x.lineWidth=3;x.stroke();x.save();x.rotate(a+Math.PI/n);x.translate(R*.57,0);x.rotate(Math.PI/2);x.fillStyle='white';x.textAlign='center';x.textBaseline='middle';x.font='bold '+(n>9?14:18)+'px system-ui';let t=item.text||'Actividad';let max=n>9?14:21;x.fillText(t.length>max?t.slice(0,max-1)+'…':t,0,0);x.restore()});x.restore();x.beginPath();x.arc(320,320,37,0,2*Math.PI);x.fillStyle='#fff';x.fill();x.strokeStyle='#dae5ee';x.lineWidth=4;x.stroke();x.textAlign='center';x.textBaseline='middle';x.fillStyle='#173650';x.font='30px system-ui';x.fillText('★',320,320)}
+function draw(){
+  const canvas=$('#wheel'),ctx=canvas.getContext('2d');
+  const items=current().items,n=items.length,R=290,C=320;
+  ctx.clearRect(0,0,640,640);
+  ctx.save();ctx.translate(C,C);ctx.rotate(angle);
+  if(!n){
+    ctx.fillStyle='#dee8f2';ctx.beginPath();ctx.arc(0,0,R,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#183650';ctx.font='bold 23px system-ui';ctx.textAlign='center';
+    ctx.fillText('Agrega actividades',0,10);
+  }else{
+    items.forEach((item,i)=>{
+      const start=-Math.PI/2+i*2*Math.PI/n;
+      const end=start+2*Math.PI/n;
+      ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,R,start,end);ctx.closePath();
+      ctx.fillStyle=item.color;ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=3;ctx.stroke();
+    });
+    items.forEach((item,i)=>{
+      const middle=-Math.PI/2+(i+.5)*2*Math.PI/n;
+      const centerRadius=R*.60;
+      const maxWidth=Math.min(160,R*.60);
+      const maxLines=n<=8?3:2;
+      const words=(item.text||'Actividad').trim().split(/\s+/);
+      let fontSize=Math.max(11,Math.min(19,24-n*.65)),lines=[];
+      // Usar el ancho real del texto para repartirlo en líneas dentro del segmento.
+      for(;fontSize>=11;fontSize--){
+        ctx.font='bold '+fontSize+'px system-ui';
+        const attempt=[];let line='';
+        for(const word of words){
+          const candidate=line?line+' '+word:word;
+          if(line&&ctx.measureText(candidate).width>maxWidth){attempt.push(line);line=word}
+          else line=candidate;
+        }
+        if(line)attempt.push(line);
+        lines=attempt;
+        if(lines.length<=maxLines&&lines.every(t=>ctx.measureText(t).width<=maxWidth))break;
+      }
+      if(lines.length>maxLines){
+        lines=lines.slice(0,maxLines);
+        let last=lines[maxLines-1];
+        while(last.length>1&&ctx.measureText(last+'…').width>maxWidth)last=last.slice(0,-1);
+        lines[maxLines-1]=last+'…';
+      }
+      ctx.save();ctx.rotate(middle);ctx.translate(centerRadius,0);
+      // Mantener la lectura en posición normal en el lado izquierdo.
+      if(Math.cos(middle)<0)ctx.rotate(Math.PI);
+      ctx.fillStyle='#fff';ctx.font='bold '+fontSize+'px system-ui';
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.shadowColor='#18365099';ctx.shadowBlur=2;
+      const lineHeight=fontSize*1.17;
+      lines.forEach((line,j)=>ctx.fillText(line,0,(j-(lines.length-1)/2)*lineHeight,maxWidth));
+      ctx.restore();
+    });
+  }
+  ctx.restore();
+  ctx.beginPath();ctx.arc(C,C,37,0,2*Math.PI);
+  ctx.fillStyle='#fff';ctx.fill();ctx.strokeStyle='#dae5ee';ctx.lineWidth=4;ctx.stroke();
+  ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#173650';ctx.font='30px system-ui';
+  ctx.fillText('★',C,C);
+}
 function render(){const w=current();$('#choice').replaceChildren(...wheels.map(o=>{let e=document.createElement('option');e.value=o.id;e.textContent=o.name;return e}));$('#choice').value=active;$('#name').value=w.name;$('#title').textContent=w.name;const box=$('#activities');box.replaceChildren();w.items.forEach((item,i)=>{const row=document.createElement('div');row.className='activity';const color=document.createElement('input');color.type='color';color.value=item.color;color.setAttribute('aria-label','Color actividad '+(i+1));color.oninput=()=>{item.color=color.value;draw();save()};const text=document.createElement('input');text.value=item.text;text.maxLength=120;text.setAttribute('aria-label','Actividad '+(i+1));text.oninput=()=>{item.text=text.value;draw();save()};const remove=document.createElement('button');remove.className='danger';remove.textContent='×';remove.setAttribute('aria-label','Eliminar actividad '+(i+1));remove.onclick=()=>{w.items.splice(i,1);render();save()};row.append(color,text,remove);box.append(row)});$('#spin').disabled=busy||!w.items.length;draw()}
 $('#spin').onclick=()=>{if(busy||!current().items.length)return;busy=true;$('#spin').disabled=true;$('#result').textContent='¡Girando!';const arr=current().items,n=arr.length,pick=Math.floor(Math.random()*n),target=((-(pick+.5)*2*Math.PI/n)%(2*Math.PI)+2*Math.PI)%(2*Math.PI),from=((angle%(2*Math.PI))+2*Math.PI)%(2*Math.PI),delta=(target-from+2*Math.PI)%(2*Math.PI),start=angle,end=start+Math.PI*2*6+delta,t0=performance.now();function frame(now){const t=Math.min(1,(now-t0)/4300);angle=start+(end-start)*(1-Math.pow(1-t,4));draw();if(t<1)requestAnimationFrame(frame);else{angle=target;busy=false;$('#spin').disabled=false;$('#result').textContent='🎉 '+arr[pick].text;draw()}}requestAnimationFrame(frame)};
 $('#choice').onchange=e=>{if(busy)return;active=e.target.value;render();save();$('#result').textContent='¡Lista para jugar!'};
